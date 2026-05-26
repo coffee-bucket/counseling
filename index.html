@@ -42,7 +42,8 @@ button{-webkit-appearance:none;}
 
 .header{background:linear-gradient(135deg,#5b6cf8,#8b5cf6);color:white;padding:12px 24px;}
 .toolbar{background:white;border-bottom:1px solid var(--gray-200);padding:10px 24px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-.student-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;padding:16px 24px;max-width:1300px;margin:0 auto;}
+.student-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;padding:16px 24px;max-width:1600px;margin:0 auto;}
+@media (min-width: 641px){.toolbar{padding-left:max(24px,calc((100vw - 1600px)/2 + 24px));padding-right:max(24px,calc((100vw - 1600px)/2 + 24px));}}
 .student-card{background:white;border-radius:10px;padding:12px;cursor:pointer;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,.04);transition:transform .12s,box-shadow .12s;position:relative;}
 .student-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,.1);}
 .student-card.completed{border-color:#a7f3d0;border-width:2px;}
@@ -188,7 +189,8 @@ const clsRef=(cls,grade=activeGrade())=>db.collection('classes').doc(classDocId(
 const gradeLabel=grade=>`${grade}학년`;
 const getStudentSeed=(grade,cls)=>(STUDENT_DATA_BY_GRADE[String(grade)]||[]).find(c=>c.cls===cls);
 const ALL_CLASSES=[1,2,3,4,5,6,7,8,9];
-const ADMIN_EMAIL='yjbs.t240003@ggh.goe.go.kr';
+const ADMIN_EMAILS=['yjbs.t240003@ggh.goe.go.kr','park224236@gmail.com'];
+const isAdminEmail=email=>ADMIN_EMAILS.includes((email||'').toLowerCase());
 const teacherSeeds=(grade=activeGrade())=>ALL_CLASSES.map(cls=>{
   const teacherNumber=`${grade}${String(cls).padStart(2,'0')}00`;
   return {teacherNumber,grade,cls,name:`${grade}학년 ${cls}반 선생님`,role:'teacher',classes:[cls]};
@@ -244,7 +246,7 @@ function LoginScreen({projectId}){
   const [mode,setMode]=useState('select');const [sNum,setSNum]=useState('');const [tNum,setTNum]=useState('');const [pw,setPw]=useState('');const [loading,setLoading]=useState(false);const [err,setErr]=useState('');
   const teacherLogin=async()=>{setLoading(true);setErr('');
     try{const r=await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
-      if((r.user.email||'').toLowerCase()!==ADMIN_EMAIL){await auth.signOut();setErr('관리자 계정으로만 로그인할 수 있습니다.');setLoading(false);}}
+      if(!isAdminEmail(r.user.email)){await auth.signOut();setErr('관리자 계정으로만 로그인할 수 있습니다.');setLoading(false);}}
     catch(e){setErr('로그인 실패: '+e.message);setLoading(false);}};
   const studentLogin=async()=>{if(!sNum.trim()||!pw.trim()){setErr('학번과 비밀번호를 입력하세요');return;}setLoading(true);setErr('');
     try{await auth.signInWithEmailAndPassword(sEmail(sNum.trim(),projectId),pw);}
@@ -653,8 +655,6 @@ function StudentDetail({student,onSave,onBack,cls,grade,isTeacher}){
         <div><div className="field-label">번호</div><input value={data.no||''} readOnly style={{width:50,background:'var(--gray-50)'}}/></div>
         <div><div className="field-label">학번</div><input value={data.studentNumber||''} readOnly style={{width:90,background:'var(--gray-50)'}}/></div>
         <div><div className="field-label">이름</div><input value={data.name||''} readOnly style={{width:90,background:'var(--gray-50)'}}/></div>
-        {isTeacher&&<><div><div className="field-label">상담일자</div><input type="date" value={data.counselingDate||''} onChange={e=>update('counselingDate',e.target.value)}/></div>
-        <div style={{flex:2,minWidth:200}}><div className="field-label">특이사항</div><input value={data.specialNote||''} onChange={e=>update('specialNote',e.target.value)} style={{width:'100%'}}/></div></>}
         {!isTeacher&&<div style={{flex:1,minWidth:200}}><div className="field-label">메모 (궁금한 점 등)</div><input value={data.studentNote||''} onChange={e=>update('studentNote',e.target.value)} style={{width:'100%'}}/></div>}
       </div>
       {isTeacher&&<div className="section-box">
@@ -1155,7 +1155,7 @@ function TeacherDashboard({user,onLogout,profile}){
   const withAcct=students.filter(s=>s.authUid).length;
 
   return(<div style={{minHeight:'100vh',background:'var(--gray-50)'}}>
-    <div className="header"><div style={{maxWidth:1300,margin:'0 auto'}}>
+    <div className="header"><div style={{maxWidth:1600,margin:'0 auto'}}>
       <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:10}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <h1 style={{fontSize:16,fontWeight:700}}>🎓 수시·정시 상담 관리 <span style={{fontSize:11,opacity:.7}}>선생님</span></h1>
@@ -1268,7 +1268,7 @@ function App(){
     if(!u){setUser(null);setRole(null);setTeacherProfile(null);setScreen('login');return;}
     const isGoogle=u.providerData.some(p=>p.providerId==='google.com');
     if(isGoogle){
-      if((u.email||'').toLowerCase()!==ADMIN_EMAIL){await auth.signOut();alert('관리자 계정으로만 로그인할 수 있습니다.');return;}
+      if(!isAdminEmail(u.email)){await auth.signOut();alert('관리자 계정으로만 로그인할 수 있습니다.');return;}
       setTeacherProfile(googleTeacherProfile(u));setRole('teacher');setUser(u);setScreen('app');return;
     }
     const tNum=teacherNumberFromUser(u);
