@@ -606,7 +606,7 @@ function PrintView({data,cls,grade}){
 /* ── Student Detail ── */
 function StudentDetail({student,onSave,onBack,cls,grade,isTeacher}){
   const [data,setData]=useState(student);const [saving,setSaving]=useState(false);const [status,setStatus]=useState('idle');
-  const [counselReq,setCounselReq]=useState(null);const [counselSlot,setCounselSlot]=useState(null);const [recordText,setRecordText]=useState('');const [recordPeriod,setRecordPeriod]=useState('');const [recordSaving,setRecordSaving]=useState(false);
+  const [counselReq,setCounselReq]=useState(null);const [counselSlot,setCounselSlot]=useState(null);const [recordText,setRecordText]=useState('');const [recordDate,setRecordDate]=useState('');const [recordRound,setRecordRound]=useState(1);const [recordPeriod,setRecordPeriod]=useState('');const [recordSaving,setRecordSaving]=useState(false);
   useEffect(()=>{setData(student);setStatus('idle');},[student.studentNumber]);
   useEffect(()=>{
     if(!isTeacher||!cls||!student.studentNumber)return;
@@ -619,15 +619,20 @@ function StudentDetail({student,onSave,onBack,cls,grade,isTeacher}){
     });
     return()=>unsub();
   },[isTeacher,cls,student.studentNumber]);
+  useEffect(()=>{setRecordDate(counselSlot?.date||data.counselingDate||'');},[counselSlot?.date,data.counselingDate]);
+  useEffect(()=>{setRecordRound(Number(counselReq?.round||data.counselingRound||1));},[counselReq?.round,data.counselingRound]);
   const update=(k,v)=>setData(p=>({...p,[k]:v}));
   const handleSave=async()=>{setSaving(true);setStatus('saving');try{await onSave(data);setStatus('saved');setTimeout(()=>setStatus('idle'),2500);}catch(e){setStatus('error');alert('저장 실패: '+e.message);}finally{setSaving(false);}};
   const toggleCompleted=async()=>{const next={...data,completed:!data.completed};setData(next);try{await onSave(next);}catch(e){alert('상담 완료 저장 실패: '+e.message);}};
   const saveCounselRecord=async()=>{
     if(!recordText.trim()){alert('상담 내용을 입력하세요.');return;}
-    const record={id:uid(),date:counselSlot?.date||data.counselingDate||'',round:counselReq?.round||data.counselingRound||1,period:recordPeriod,content:recordText.trim(),savedAt:new Date().toISOString()};
-    const next={...data,counselingDate:record.date,counselingRound:record.round,counselingRecords:[record,...(data.counselingRecords||[])]};
+    const selectedRound=Math.max(1,Number(recordRound)||1);
+    const record={id:uid(),date:recordDate||'',round:selectedRound,period:recordPeriod,content:recordText.trim(),savedAt:new Date().toISOString()};
+    const next={...data,counselingDate:record.date,counselingRound:selectedRound,counselingRecords:[record,...(data.counselingRecords||[])]};
     setRecordSaving(true);
-    try{await onSave(next);setData(next);setRecordText('');}
+    try{await onSave(next);
+      if(isTeacher&&cls&&student.studentNumber){await clsRef(cls,grade).collection('requests').doc(student.studentNumber).set({studentNumber:student.studentNumber,name:data.name||student.name||'',round:selectedRound,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});}
+      setData(next);setRecordText('');}
     catch(e){alert('상담 내용 저장 실패: '+e.message);}
     finally{setRecordSaving(false);}
   };
@@ -660,8 +665,8 @@ function StudentDetail({student,onSave,onBack,cls,grade,isTeacher}){
       {isTeacher&&<div className="section-box">
         <div className="section-title">상담 누적 기록</div>
         <div style={{display:'grid',gridTemplateColumns:'140px 80px 80px 1fr auto',gap:8,alignItems:'end',marginBottom:10}}>
-          <div><div className="field-label">상담일자</div><input value={counselSlot?.date||data.counselingDate||''} readOnly style={{width:'100%',background:'var(--gray-50)'}}/></div>
-          <div><div className="field-label">회차</div><input value={`${counselReq?.round||data.counselingRound||1}회차`} readOnly style={{width:'100%',background:'var(--gray-50)',textAlign:'center',fontWeight:700}}/></div>
+          <div><div className="field-label">상담일자</div><input type="date" value={recordDate} onChange={e=>setRecordDate(e.target.value)} style={{width:'100%'}}/></div>
+          <div><div className="field-label">회차</div><select value={recordRound} onChange={e=>setRecordRound(Number(e.target.value)||1)} style={{width:'100%',textAlign:'center',fontWeight:700}}>{Array.from({length:10},(_,i)=>i+1).map(n=><option key={n} value={n}>{n}회차</option>)}</select></div>
           <div><div className="field-label">교시</div><select value={recordPeriod} onChange={e=>setRecordPeriod(e.target.value)} style={{width:'100%'}}>
             <option value="">-</option>
             {[1,2,3,4,5,6,7].map(n=><option key={n} value={`${n}교시`}>{n}교시</option>)}
@@ -695,7 +700,7 @@ function StudentDetail({student,onSave,onBack,cls,grade,isTeacher}){
 
 /* ── Schedule Modal (Teacher) ── */
 function ScheduleModal({cls,grade,onClose}){
-  const DEFAULT_LOCATION='상담실';
+  const DEFAULT_LOCATION='교무실';
   const [slots,setSlots]=useState([]);
   const [requests,setRequests]=useState({});
   const [date,setDate]=useState('');const [period,setPeriod]=useState('');const [location,setLocation]=useState(DEFAULT_LOCATION);
