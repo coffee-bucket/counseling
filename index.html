@@ -242,16 +242,16 @@ function ConfigScreen({onSave}){
   </div></div>);}
 
 /* ── Login Screen ── */
-function LoginScreen({projectId}){
+function LoginScreen({projectId,onGoogleAdminLogin}){
   const [mode,setMode]=useState('select');const [sNum,setSNum]=useState('');const [tNum,setTNum]=useState('');const [pw,setPw]=useState('');const [loading,setLoading]=useState(false);const [err,setErr]=useState('');
   const teacherLogin=async()=>{setLoading(true);setErr('');
     try{const r=await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
-      if(!isAdminEmail(r.user.email)){await auth.signOut();setErr('관리자 계정으로만 로그인할 수 있습니다.');setLoading(false);}}
+      if(!isAdminEmail(r.user.email)){await auth.signOut();setErr('관리자 계정으로만 로그인할 수 있습니다.');setLoading(false);return;}
+      onGoogleAdminLogin?.(r.user);}
     catch(e){setErr('로그인 실패: '+e.message);setLoading(false);}};
   const studentLogin=async()=>{if(!sNum.trim()||!pw.trim()){setErr('학번과 비밀번호를 입력하세요');return;}setLoading(true);setErr('');
     try{await auth.signInWithEmailAndPassword(sEmail(sNum.trim(),projectId),pw);}
     catch(e){setErr('학번 또는 비밀번호가 올바르지 않습니다');setLoading(false);}};
-
   const teacherPasswordLogin=async()=>{if(!tNum.trim()||!pw.trim()){setErr('계정과 비밀번호를 입력하세요');return;}setLoading(true);setErr('');
     try{await auth.signInWithEmailAndPassword(tEmail(tNum.trim(),projectId),pw);}
     catch(e){setErr('계정 또는 비밀번호가 올바르지 않습니다');setLoading(false);}};
@@ -1302,10 +1302,11 @@ function App(){
     }catch(e){console.error('Firebase 오류:',e);setScreen('config');}
   },[]);
   const handleConfig=cfg=>{initFirebase(cfg);setProjectId(cfg.projectId);auth.onAuthStateChanged(u=>{resolveUser(u).catch(e=>{console.error(e);setScreen('login');});});};
+  const handleGoogleAdminLogin=u=>{setTeacherProfile(googleTeacherProfile(u));setRole('teacher');setUser(u);setScreen('app');};
   const handleLogout=()=>{auth.signOut();setScreen('login');setUser(null);setRole(null);setTeacherProfile(null);};
   if(screen==='loading')return<div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--gray-400)'}}>🎓 로딩 중...</div>;
   if(screen==='config')return<ConfigScreen onSave={handleConfig}/>;
-  if(screen==='login')return<LoginScreen projectId={projectId}/>;
+  if(screen==='login')return<LoginScreen projectId={projectId} onGoogleAdminLogin={handleGoogleAdminLogin}/>;
   if(screen==='app'&&role==='teacher')return<TeacherDashboard user={user} onLogout={handleLogout} profile={teacherProfile}/>;
   if(screen==='app'&&role==='student')return<StudentDashboard user={user} onLogout={handleLogout}/>;
   return null;
