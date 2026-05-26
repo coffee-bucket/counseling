@@ -224,7 +224,7 @@ hr{border:none;border-top:1px dashed #ccc;margin:6px 0;}.url{font-size:9px;color
 .note{font-size:8px;color:#aaa;margin-top:4px;}@page{margin:10mm 8mm;}
 </style></head><body><div class="grid">
 ${cards.map(s=>`<div class="card"><div class="card-inner"><div class="card-left"><div class="school">🎓 양주백석고 상담 관리</div><div class="cls">${grade}학년 ${cls}반 · ${s.no}번</div><div class="name">${s.name}</div><hr/><div class="row"><span class="lbl">아이디(학번)</span><span class="val">${s.studentNumber}</span></div><div class="row"><span class="lbl">비밀번호</span><span class="pw">${s.pw||'—'}</span></div><div class="note">* 비밀번호는 안전한 곳에 보관하세요</div></div><div class="card-qr"><img src="${window.QR_SRC}" style="width:78px;height:78px;"/><div style="font-size:8px;color:#555;margin-top:2px;">상담사이트</div></div></div></div>`).join('')}
-</div><scr"+"ipt>window.onload=()=>{window.print();}<\/script></body></html>`;
+</div><script>window.onload=()=>{window.print();}<\/script></body></html>`;
   const w=window.open('','_blank','width=900,height=700');
   if(w){w.document.write(html);w.document.close();}
   else alert('팝업 차단됨. 주소창 옆 팝업 허용 후 다시 시도하세요.');};
@@ -252,6 +252,7 @@ function LoginScreen({projectId,onGoogleAdminLogin}){
   const studentLogin=async()=>{if(!sNum.trim()||!pw.trim()){setErr('학번과 비밀번호를 입력하세요');return;}setLoading(true);setErr('');
     try{await auth.signInWithEmailAndPassword(sEmail(sNum.trim(),projectId),pw);}
     catch(e){setErr('학번 또는 비밀번호가 올바르지 않습니다');setLoading(false);}};
+
   const teacherPasswordLogin=async()=>{if(!tNum.trim()||!pw.trim()){setErr('계정과 비밀번호를 입력하세요');return;}setLoading(true);setErr('');
     try{await auth.signInWithEmailAndPassword(tEmail(tNum.trim(),projectId),pw);}
     catch(e){setErr('계정 또는 비밀번호가 올바르지 않습니다');setLoading(false);}};
@@ -463,7 +464,7 @@ function TeacherAccountModal({grade,projectId,onClose}){
     const rows=results.map(r=>`<tr><td>${r.cls}반</td><td>${r.teacherNumber}</td><td>${r.name}</td><td>${r.role==='admin'?'관리자':'담임'}</td><td>${r.password||''}</td></tr>`).join('');
     const w=window.open('','_blank','width=900,height=700');
     if(!w)return alert('팝업 차단을 해제해 주세요.');
-    w.document.write(`<html><head><title>선생님 계정표</title><style>body{font-family:Malgun Gothic,sans-serif;padding:24px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:8px;text-align:center}th{background:#eef2ff}</style></head><body><h2>선생님 계정표</h2><table><thead><tr><th>반</th><th>번호</th><th>이름</th><th>권한</th><th>비밀번호</th></tr></thead><tbody>${rows}</tbody></table><scr"+"ipt>window.onload=()=>window.print()<\/script></body></html>`);
+    w.document.write(`<html><head><title>선생님 계정표</title><style>body{font-family:Malgun Gothic,sans-serif;padding:24px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:8px;text-align:center}th{background:#eef2ff}</style></head><body><h2>선생님 계정표</h2><table><thead><tr><th>반</th><th>번호</th><th>이름</th><th>권한</th><th>비밀번호</th></tr></thead><tbody>${rows}</tbody></table><script>window.onload=()=>window.print()<\/script></body></html>`);
     w.document.close();
   };
   return(<div className="modal-bg" onClick={onClose}><div className="modal" style={{width:'min(620px, calc(100vw - 24px))',maxHeight:'88vh'}} onClick={e=>e.stopPropagation()}>
@@ -703,6 +704,7 @@ function ScheduleModal({cls,grade,onClose}){
   const DEFAULT_LOCATION='교무실';
   const [slots,setSlots]=useState([]);
   const [requests,setRequests]=useState({});
+  const [studentMap,setStudentMap]=useState({});
   const [date,setDate]=useState('');const [period,setPeriod]=useState('');const [location,setLocation]=useState(DEFAULT_LOCATION);
   const [adding,setAdding]=useState(false);const [tab,setTab]=useState('slots');
   const [modalPos,setModalPos]=useState(null);
@@ -718,8 +720,10 @@ function ScheduleModal({cls,grade,onClose}){
       .onSnapshot(snap=>setSlots(sortSlots(snap.docs.map(d=>({id:d.id,...d.data()})))),err=>{console.error(err);alert('상담 일정 불러오기 실패: '+(err.message||err));});
     const unsub2=clsRef(cls,grade).collection('requests')
       .onSnapshot(snap=>{const m={};snap.docs.forEach(d=>m[d.id]=d.data());setRequests(m);},err=>{console.error(err);alert('상담 신청 불러오기 실패: '+(err.message||err));});
-    return()=>{unsub();unsub2();};
-  },[cls]);
+    const unsub3=clsRef(cls,grade).collection('students')
+      .onSnapshot(snap=>{const m={};snap.docs.forEach(d=>m[d.id]={id:d.id,...d.data()});setStudentMap(m);},err=>{console.error(err);});
+    return()=>{unsub();unsub2();unsub3();};
+  },[cls,grade]);
 
   useEffect(()=>{
     const move=e=>{
@@ -769,14 +773,24 @@ function ScheduleModal({cls,grade,onClose}){
   const deleteSlot=async id=>{
     if(!window.confirm('삭제하시겠습니까?'))return;
     try{
+      const deletedSlot=slots.find(s=>s.id===id)||{};
       const batch=db.batch();
       batch.delete(clsRef(cls,grade).collection('slots').doc(id));
       Object.entries(requests).forEach(([studentNum,req])=>{
         const requested=(req.requestedSlots||[]).filter(sid=>sid!==id);
         const patch={updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
         if((req.requestedSlots||[]).includes(id))patch.requestedSlots=requested;
-        if(req.confirmedSlotId===id){patch.confirmedSlotId='';patch.status=requested.length>0?'pending':'completed';}
-        if(req.lastCompletedSlotId===id)patch.lastCompletedSlotId='';
+        if(req.confirmedSlotId===id){
+          patch.confirmedSlotId='';
+          patch.status=requested.length>0?'pending':firebase.firestore.FieldValue.delete();
+        }
+        if(req.lastCompletedSlotId===id||deletedSlot.completedFor===studentNum){
+          const completedRound=Number(deletedSlot.completedRound||req.lastCompletedRound||0);
+          patch.lastCompletedSlotId=firebase.firestore.FieldValue.delete();
+          patch.lastCompletedRound=firebase.firestore.FieldValue.delete();
+          patch.round=Math.max(1,completedRound||Number(req.round||1)-1);
+          if(!requested.length&&req.confirmedSlotId!==id)patch.status=firebase.firestore.FieldValue.delete();
+        }
         if(Object.keys(patch).length>1)batch.set(clsRef(cls,grade).collection('requests').doc(studentNum),patch,{merge:true});
       });
       await batch.commit();
@@ -785,8 +799,17 @@ function ScheduleModal({cls,grade,onClose}){
         const next={...prev};
         Object.entries(next).forEach(([studentNum,req])=>{
           const requested=(req.requestedSlots||[]).filter(sid=>sid!==id);
-          if((req.requestedSlots||[]).includes(id)||req.confirmedSlotId===id||req.lastCompletedSlotId===id){
-            next[studentNum]={...req,requestedSlots:requested,confirmedSlotId:req.confirmedSlotId===id?'':req.confirmedSlotId,lastCompletedSlotId:req.lastCompletedSlotId===id?'':req.lastCompletedSlotId};
+          if((req.requestedSlots||[]).includes(id)||req.confirmedSlotId===id||req.lastCompletedSlotId===id||deletedSlot.completedFor===studentNum){
+            const updated={...req,requestedSlots:requested};
+            if(req.confirmedSlotId===id)updated.confirmedSlotId='';
+            if(req.lastCompletedSlotId===id||deletedSlot.completedFor===studentNum){
+              const completedRound=Number(deletedSlot.completedRound||req.lastCompletedRound||0);
+              delete updated.lastCompletedSlotId;
+              delete updated.lastCompletedRound;
+              updated.round=Math.max(1,completedRound||Number(req.round||1)-1);
+            }
+            if(!updated.confirmedSlotId&&!requested.length&&(req.lastCompletedSlotId===id||deletedSlot.completedFor===studentNum))delete updated.status;
+            next[studentNum]=updated;
           }
         });
         return next;
@@ -829,7 +852,7 @@ function ScheduleModal({cls,grade,onClose}){
   const byDate={};slots.forEach(s=>{if(!byDate[s.date])byDate[s.date]=[];byDate[s.date].push(s);});
   const confirmed=slots.filter(s=>s.confirmedFor&&requests[s.confirmedFor]?.status==='confirmed');
   const pending=Object.entries(requests).filter(([k,v])=>v.status!=='confirmed'&&v.requestedSlots?.length>0);
-  const roundRows=Object.entries(requests).sort(([a],[b])=>a.localeCompare(b));
+  const roundRows=Object.keys({...studentMap,...requests}).sort((a,b)=>a.localeCompare(b)).map(sNum=>{const req=requests[sNum]||{};const st=studentMap[sNum]||{};const recordCount=(st.counselingRecords||[]).length;const completedSlotCount=slots.filter(s=>s.completedFor===sNum).length;const inferredCount=Math.max(0,Number(req.round||1)-1);const completedCount=Math.max(recordCount,completedSlotCount,Number(req.lastCompletedRound||0),inferredCount);return{sNum,req,st,name:st.name||req.name||'',completedCount,currentRound:req.round||st.counselingRound||Math.max(1,completedCount+1)};});
 
   const dayLabel=d=>{const days=['일','월','화','수','목','금','토'];const dt=new Date(d);return `${d} (${days[dt.getDay()]})`;};
   const periodTimes={0:'08:00~08:50',8:'17:00~17:50',9:'18:00~18:50',10:'19:00~19:50',11:'20:00~20:50',12:'21:00~21:50'};
@@ -927,21 +950,22 @@ function ScheduleModal({cls,grade,onClose}){
             </tr>);})}</tbody>
         </table>)}
 
-      {tab==='rounds'&&(roundRows.length===0?<div className="empty-state" style={{padding:30}}>상담 신청 이력이 없습니다</div>:
+      {tab==='rounds'&&(roundRows.length===0?<div className="empty-state" style={{padding:30}}>학생 정보가 없습니다</div>:
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
           <thead><tr style={{background:'var(--gray-50)'}}>
-            {['학번','이름','현재 회차','상태','완료 회차'].map(h=><th key={h} style={{padding:'6px 10px',textAlign:'center',border:'1px solid var(--gray-200)',fontWeight:600}}>{h}</th>)}
+            {['학번','이름','상담 횟수','현재 회차','상태','완료 회차'].map(h=><th key={h} style={{padding:'6px 10px',textAlign:'center',border:'1px solid var(--gray-200)',fontWeight:600}}>{h}</th>)}
           </tr></thead>
-          <tbody>{roundRows.map(([sNum,req])=>(
-            <tr key={sNum}>
-              <td style={{padding:'6px 10px',border:'1px solid var(--gray-200)',fontWeight:700,textAlign:'center'}}>{sNum}</td>
-              <td style={{padding:'6px 10px',border:'1px solid var(--gray-200)',textAlign:'center'}}>{req.name||'-'}</td>
-              <td style={{padding:'6px 10px',border:'1px solid var(--gray-200)',fontWeight:700,color:'var(--primary)',textAlign:'center'}}>{req.round||1}회차</td>
+          <tbody>{roundRows.map(row=>{const req=row.req;return(
+            <tr key={row.sNum}>
+              <td style={{padding:'6px 10px',border:'1px solid var(--gray-200)',fontWeight:700,textAlign:'center'}}>{row.sNum}</td>
+              <td style={{padding:'6px 10px',border:'1px solid var(--gray-200)',textAlign:'center'}}>{row.name||'-'}</td>
+              <td style={{padding:'6px 10px',border:'1px solid var(--gray-200)',fontWeight:700,color:'var(--primary)',textAlign:'center'}}>{row.completedCount}회</td>
+              <td style={{padding:'6px 10px',border:'1px solid var(--gray-200)',fontWeight:700,color:'var(--primary)',textAlign:'center'}}>{row.currentRound||1}회차</td>
               <td style={{padding:'6px 10px',border:'1px solid var(--gray-200)',textAlign:'center'}}>
                 <span className={`badge ${req.status==='confirmed'?'badge-green':req.status==='pending'?'badge-blue':req.status==='completed'?'badge-gray':'badge-gray'}`}>{req.status==='confirmed'?'확정':req.status==='pending'?'신청':req.status==='completed'?'완료 후 재신청 가능':'-'}</span>
               </td>
               <td style={{padding:'6px 10px',border:'1px solid var(--gray-200)',color:'var(--gray-500)',textAlign:'center'}}>{req.lastCompletedRound?`${req.lastCompletedRound}회차 완료`:'-'}</td>
-            </tr>))}</tbody>
+            </tr>);})}</tbody>
         </table>)}
     </div>
   </div></div>);}
